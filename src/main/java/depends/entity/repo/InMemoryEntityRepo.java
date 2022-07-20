@@ -36,19 +36,19 @@ public class InMemoryEntityRepo extends SimpleIdGenerator implements EntityRepo 
 		
 	}
 	
-	private Map<String, Entity> allEntieisByName;
+	private Map<String, Entity> allEntitiesByName;
 	private Map<Integer, Entity> allEntitiesById;
 	private List<Entity> allFileEntitiesByOrder;
 
 	public InMemoryEntityRepo() {
-		allEntieisByName = new TreeMap<>();
+		allEntitiesByName = new TreeMap<>();
 		allEntitiesById = new TreeMap<>();
 		allFileEntitiesByOrder = new LinkedList<>();
 	}
 
 	@Override
 	public Entity getEntity(String entityName) {
-		return allEntieisByName.get(entityName);
+		return allEntitiesByName.get(entityName);
 	}
 
 	@Override
@@ -63,17 +63,17 @@ public class InMemoryEntityRepo extends SimpleIdGenerator implements EntityRepo 
 		if (entity.getQualifiedName() != null && !(entity.getQualifiedName().isEmpty())) {
 			name = entity.getQualifiedName();
 		}
-		if (allEntieisByName.containsKey(name)) {
-			Entity existedEntity = allEntieisByName.get(name);
+		if (allEntitiesByName.containsKey(name)) {
+			Entity existedEntity = allEntitiesByName.get(name);
 			if (existedEntity instanceof MultiDeclareEntities) {
 				((MultiDeclareEntities) existedEntity).add(entity);
 			} else {
 				MultiDeclareEntities eMultiDeclare = new MultiDeclareEntities(existedEntity, this.generateId());
 				eMultiDeclare.add(entity);
-				allEntieisByName.put(name, eMultiDeclare);
+				allEntitiesByName.put(name, eMultiDeclare);
 			}
 		} else {
-			allEntieisByName.put(name, entity);
+			allEntitiesByName.put(name, entity);
 		}
 		if (entity.getParent() != null)
 			Entity.setParent(entity, entity.getParent());
@@ -86,7 +86,12 @@ public class InMemoryEntityRepo extends SimpleIdGenerator implements EntityRepo 
 
 	
 	@Override
-	public void update(Entity entity) {
+	public void updateEntityPath(Entity entity, String newPath) {
+		this.allEntitiesByName.remove(entity.getQualifiedName());
+		entity.updateEntityPath(newPath);
+		entity.setRawName(new GenericName(newPath));
+		entity.setQualifiedName(newPath);
+		this.allEntitiesByName.put(newPath, entity);
 	}
 
 	@Override
@@ -100,6 +105,11 @@ public class InMemoryEntityRepo extends SimpleIdGenerator implements EntityRepo 
 	}
 
 	@Override
+	public Collection<Entity> getAllEntities() {
+		return allEntitiesById.values();
+	}
+
+	@Override
 	public Iterator<Entity> sortedFileIterator() {
 		return allFileEntitiesByOrder.iterator();
 	}
@@ -108,6 +118,19 @@ public class InMemoryEntityRepo extends SimpleIdGenerator implements EntityRepo 
 	public void addFile(FileEntity fileEntity) {
 		allFileEntitiesByOrder.add(fileEntity);
 	}
+
+	@Override
+	public void removeEntity(Entity entity) {
+		this.allEntitiesByName.remove(entity.getQualifiedName());
+		this.allEntitiesById.remove(entity.getId());
+		this.allFileEntitiesByOrder.remove(entity);
+	}
+
+	@Override
+	public void putEntityByName(Entity entity, String name) {
+		this.allEntitiesByName.put(name, entity);
+	}
+
 
 //	public boolean checkForOne(Relation relation, Entity entity){
 //		if (relation.getEntity().getMutliDeclare() != null) {

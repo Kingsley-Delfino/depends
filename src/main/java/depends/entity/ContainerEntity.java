@@ -373,7 +373,7 @@ public abstract class ContainerEntity extends DecoratedEntity {
 			if(expression.isCall()){
 				Entity preReferred = expression.getReferredEntity();
 				if(preReferred != null){
-					if(preReferred.getMutliDeclare() != null && preReferred.getClass() == FunctionEntity.class){
+					if(preReferred.getMultiDeclare() != null && preReferred.getClass() == FunctionEntity.class){
 						if((expression.isDot() && expression.getChildren().size() > 1) ||
 								(!expression.isDot() && expression.getChildren().size() > 0)){
 							unsolvedCalls.add(expression);
@@ -399,7 +399,7 @@ public abstract class ContainerEntity extends DecoratedEntity {
 					}
 				}
 				//根据参数类型寻找重载方法中合适的方法（基本类型由于都是built-in类型所以无法区分）
-				for(Entity entity : prereferred.getMutliDeclare().getEntities()){
+				for(Entity entity : prereferred.getMultiDeclare().getEntities()){
 					if(entity.getClass() == FunctionEntity.class){
 						Collection<VarEntity> parameters = new ArrayList<>(((FunctionEntity) entity).getParameters());
 						if(parameters.size() != trueTypes.size()) break;
@@ -513,8 +513,8 @@ public abstract class ContainerEntity extends DecoratedEntity {
 	 */
 	public List<Entity> lookupFunctionInVisibleScope(GenericName functionName) {
 		List<Entity> functions = new ArrayList<>();
-		if (this.getMutliDeclare() != null) {
-			for (Entity fromEntity : this.getMutliDeclare().getEntities()) {
+		if (this.getMultiDeclare() != null) {
+			for (Entity fromEntity : this.getMultiDeclare().getEntities()) {
 				Entity f = lookupFunctionBottomUpTillTopContainer(functionName, fromEntity);
 				if (f != null) {
 					functions.add(f);

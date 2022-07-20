@@ -142,9 +142,9 @@ public class RelationCounter {
 		boolean matched = false;
 		if (expression.isCall()) {
 			//修正关系到FunctionProto
-			if(referredEntity.getMutliDeclare() != null && !isInHeaderFile(referredEntity) &&
+			if(referredEntity.getMultiDeclare() != null && !isInHeaderFile(referredEntity) &&
 				referredEntity.getAncestorOfType(FileEntity.class) != entity.getAncestorOfType(FileEntity.class)){
-				for(Entity entity1 : referredEntity.getMutliDeclare().getEntities()){
+				for(Entity entity1 : referredEntity.getMultiDeclare().getEntities()){
 					if(entity1.getAncestorOfType(FileEntity.class).getId().equals(entity.getAncestorOfType(FileEntity.class).getId())){
 						referredEntity = entity1;
 						break;

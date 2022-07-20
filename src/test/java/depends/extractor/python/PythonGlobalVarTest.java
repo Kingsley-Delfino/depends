@@ -1,6 +1,7 @@
 package depends.extractor.python;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -26,7 +27,7 @@ public class PythonGlobalVarTest extends PythonParserTest {
 		    PythonFileParser parser = createParser(src);
 		    parser.parse();
 	    }
-	    inferer.resolveAllBindings(true,null);
+	    inferer.resolveAllBindings(true,new ArrayList<>(),null);
         Entity foo = repo.getEntity(withPackageName(srcs[0],"foo"));
         this.assertContainsRelation(foo, DependencyType.IMPLLINK, "global_var");
 	}

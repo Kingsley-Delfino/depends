@@ -26,277 +26,342 @@ package depends.extractor;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.util.*;
 
+import depends.entity.PackageEntity;
+import depends.extractor.git.CommitExtractor;
+import depends.extractor.git.GitExtractor;
+import depends.relations.Relation;
+import multilang.depends.util.file.FolderCollector;
 import org.codehaus.plexus.util.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.eclipse.jgit.revwalk.RevCommit;
 
 import depends.entity.Entity;
 import depends.entity.FileEntity;
 import depends.entity.repo.BuiltInType;
 import depends.entity.repo.EntityRepo;
 import depends.entity.repo.InMemoryEntityRepo;
-import depends.generator.DependencyGenerator;
 import depends.matrix.core.DependencyMatrix;
-import depends.matrix.transform.OrderedMatrixGenerator;
 import depends.relations.ImportLookupStrategy;
 import depends.relations.Inferer;
 import multilang.depends.util.file.FileTraversal;
 import multilang.depends.util.file.FileUtil;
 
+import static depends.utils.FileUtil.*;
 
 abstract public class AbstractLangProcessor {
-	/**
-	 * The name of the lang
-	 *
-	 * @return
-	 */
-	public abstract String supportedLanguage();
+    /**
+     * The name of the lang
+     */
+    public abstract String supportedLanguage();
 
-	/**
-	 * The file suffixes in the lang
-	 *
-	 * @return
-	 */
-	public abstract String[] fileSuffixes();
+    /**
+     * The file suffixes in the lang
+     */
+    public abstract String[] fileSuffixes();
 
-	/**
-	 * Strategy of how to lookup types and entities in the lang.
-	 *
-	 * @return
-	 */
-	public abstract ImportLookupStrategy getImportLookupStrategy();
+    /**
+     * Strategy of how to lookup types and entities in the lang.
+     */
+    public abstract ImportLookupStrategy getImportLookupStrategy();
 
-	/**
-	 * The builtInType of the lang.
-	 *
-	 * @return
-	 */
-	public abstract BuiltInType getBuiltInType();
+    /**
+     * The builtInType of the lang.
+     */
+    public abstract BuiltInType getBuiltInType();
 
-	/**
-	 * The language specific file parser
-	 *
-	 * @param fileFullPath
-	 * @return
-	 */
-	protected abstract FileParser createFileParser(String fileFullPath);
+    /**
+     * The language specific file parser
+     */
+    protected abstract FileParser createFileParser(String fileFullPath);
 
-	public Inferer inferer;
-	protected EntityRepo entityRepo;
-	DependencyMatrix dependencyMatrix;
-	protected String inputSrcPath;
-	public String[] includeDirs;
-	private DependencyGenerator dependencyGenerator;
-	private Set<UnsolvedBindings> potentialExternalDependencies;
-	private List<String> typeFilter;
-	private List<String> includePaths;
-	private static Logger logger = LoggerFactory.getLogger(AbstractLangProcessor.class);
-	public List<String> excludePaths;
+    public Inferer inferer;
+    protected EntityRepo entityRepo;
+    DependencyMatrix dependencyMatrix;
+    private String projectPath;
+    protected String inputSrcPath;
+    public String[] includeDirs;
+    private Set<UnsolvedBindings> potentialExternalDependencies;
+    private List<String> includePaths;
+    public List<String> excludePaths;
 
-	public AbstractLangProcessor(boolean eagerExpressionResolve) {
-		entityRepo = new InMemoryEntityRepo();
-		inferer = new Inferer(entityRepo, getImportLookupStrategy(), getBuiltInType(), eagerExpressionResolve);
-	}
+    public AbstractLangProcessor(boolean eagerExpressionResolve) {
+        entityRepo = new InMemoryEntityRepo();
+        inferer = new Inferer(entityRepo, getImportLookupStrategy(), getBuiltInType(), eagerExpressionResolve);
+    }
 
-	/**
-	 * The process steps of build dependencies. Step 1: parse all files, add
-	 * entities and expression into repositories Step 2: resolve bindings of files
-	 * (if not resolved yet) Step 3: identify dependencies
-	 *
-	 * @param includeDir
-	 * @param inputDir
-	 */
-	public void buildDependencies(String inputDir, String[] includeDir, List<String> typeFilter, boolean callAsImpl, boolean isCollectUnsolvedBindings, boolean isDuckTypingDeduce, List<String> excludePaths) {
-		this.inputSrcPath = inputDir;
-		this.includeDirs = includeDir;
-		this.typeFilter = typeFilter;
-		this.excludePaths = excludePaths;
-		this.inferer.setCollectUnsolvedBindings(isCollectUnsolvedBindings);
-		this.inferer.setDuckTypingDeduce(isDuckTypingDeduce);
-		logger.info("Start parsing files...");
-		parseAllFiles();
-		markAllEntitiesScope();
-		if (logger.isInfoEnabled()) {
-			logger.info("Resolve types and bindings of variables, methods and expressions.... " + this.inputSrcPath);
-			logger.info("Heap Information: " + ManagementFactory.getMemoryMXBean().getHeapMemoryUsage());
-		}
-		resolveBindings(callAsImpl);
-		if (logger.isInfoEnabled()) {
-			System.gc();
-			logger.info("Heap Information: " + ManagementFactory.getMemoryMXBean().getHeapMemoryUsage());
-		}
-//		//identifyDependencies();
-//		String path = "D:\\FDSE\\dependsData\\output-old.txt";
-//		File file = new File(path);
-//		//如果文件不存在，则自动生成文件；
-//		if(!file.exists()){
-//			try{
-//				file.createNewFile();
-//			}catch (IOException e){
-//				e.printStackTrace();
-//			}
-//		}
-//		try{
-//			//引入输出流
-//			FileOutputStream outPutStream = new FileOutputStream(file);
-//			StringBuilder stringBuilder = new StringBuilder();
-//			Iterator it = entityRepo.entityIterator();
-//			while(it.hasNext()){
-//				Entity entity = (Entity)it.next();
-//				stringBuilder.delete(0,stringBuilder.length());
-//				stringBuilder.append("-------------" + entity.getClass() + " " + entity + "\n");
-//				entity.getRelations().forEach(relation -> {
-//					stringBuilder.append(relation.getType() + " " + relation.getEntity().getClass() + " " + relation.getEntity() + "\n");
-//				});
-//				String context = stringBuilder.toString();//将可变字符串变为固定长度的字符串，方便下面的转码；
-//				try{
-//					byte[]  bytes = context.getBytes("UTF-8");//因为中文可能会乱码，这里使用了转码，转成UTF-8；
-//					outPutStream.write(bytes);//写入内容到文件；
-//				}catch (Exception e){
-//					e.printStackTrace();
-//				}
-//			}
-//			outPutStream.close();
-//		}catch(Exception e){
-//			e.printStackTrace();//获取异常
-//		}
-		logger.info("Dependencie data generating done successfully...");
-	}
+    /**
+     * The process steps of build dependencies.
+     * Step 1: parse all files, add entities and expression into repositories;
+     * Step 2: resolve bindings of files (if not resolved yet);
+     * Step 3: identify dependencies.
+     */
+    public void buildDependencies(String inputDir, String[] includeDir, boolean isCollectUnsolvedBindings, boolean isDuckTypingDeduce, List<String> excludePaths) {
+        this.projectPath = inputDir;
+        this.inputSrcPath = inputDir;
+        this.includeDirs = includeDir;
+        this.excludePaths = excludePaths;
+        this.inferer.setCollectUnsolvedBindings(isCollectUnsolvedBindings);
+        this.inferer.setDuckTypingDeduce(isDuckTypingDeduce);
+        String since = "2022-04-04 00:00:00";
+        String until = "2022-07-05 23:59:59";
+        GitExtractor gitExtractor = new GitExtractor("/Users/kingsley/FDSE/multi-dependency/CodeSource/Java/commons-io");
+        List<RevCommit> commits = gitExtractor.getRangeCommits(since, until, false);
+        if (!commits.isEmpty()) {
+            gitExtractor.checkOutToCommit(commits.get(commits.size() - 1), this.projectPath);
+        }
+        buildDependenciesForInitialVersion();
+        buildDependenciesForIncrementalVersion(gitExtractor, commits);
+    }
 
-	private void markAllEntitiesScope() {
-		logger.info("Start Marking ALL Entities'Scope...");
-		entityRepo.getFileEntities().stream().forEach(entity -> {
-			Entity file = entity.getAncestorOfType(FileEntity.class);
-			try {
-				if (!file.getQualifiedName().startsWith(this.inputSrcPath)) {
-					entity.setInScope(false);
-				}
-			} catch (Exception e) {
+    public void buildDependenciesForInitialVersion() {
+        // for this search (isAutoInclude = true)
+        buildIncludeDirection(true);
+        parseAllFiles();
+        markAllEntitiesScope();
+        // for java (callAsImpl = false)
+        resolveBindings(false, this.entityRepo.getFileEntities());
+        System.gc();
+        System.runFinalization();
+    }
 
-			}
-		});
-		logger.info("Mark ALL Entities'Scope Successfully...");
-	}
+    public void buildDependenciesForIncrementalVersion(GitExtractor gitExtractor, List<RevCommit> commits) {
+        CommitExtractor commitExtractor = new CommitExtractor(gitExtractor);
+        for (int i = commits.size() - 2; i >= 0; i--) {
+            RevCommit commit = commits.get(i);
+            System.out.println("\nCommit: " + commit.getName());
+            List<String> currentFilePathList = new ArrayList<>();
+            List<String> currentSnapshotFilePathList = new ArrayList<>();
+            List<String> previousFilePathList = new ArrayList<>();
+            List<Entity> currentFileEntityList = new ArrayList<>();
+            List<Entity> previousFileEntityList = new ArrayList<>();
+            // those file entities that depend on previous file entities, we need to identify dependencies of them to current file entities
+            List<Entity> dependsOnPreviousFileEntityList = new ArrayList<>();
+            commitExtractor.getChangedFilePath(commit, currentFilePathList, currentSnapshotFilePathList, previousFilePathList, this.projectPath);
+            if (!previousFilePathList.isEmpty()) {
+                // find previous file entities
+                findFileEntityByFileNameFromEntityRepository(previousFilePathList, previousFileEntityList);
+                // find entities that depend on previous file entities
+                findDependsOnPreviousFileEntity(previousFileEntityList, dependsOnPreviousFileEntityList);
+                // remove previous file entities and their children from entity repository
+                for (Entity entity : previousFileEntityList) {
+                    removePreviousEntity(entity);
+                }
+            }
+            if (!currentFilePathList.isEmpty()) {
+                this.inputSrcPath = getProjectPath(currentSnapshotFilePathList.get(0));
+                this.includeDirs = new String[0];
+                buildIncludeDirection(true);
+                this.excludePaths = new ArrayList<>();
+                getTestPath(this.excludePaths, this.includeDirs);
+                parseAllFiles();
+                // find current file entities
+                findFileEntityByFileNameFromEntityRepository(currentSnapshotFilePathList, currentFileEntityList);
+                // change current file path to previous path
+                updateNewFileEntityPath(currentFileEntityList);
+                // delete current packages and add current file entities to previous packages
+                for (Entity entity : currentFileEntityList) {
+                    removeCurrentParentEntity(entity);
+                }
+            }
+            // identify dependencies again
+            Collection<Entity> entityCollection = new ArrayList<>();
+            entityCollection.addAll(dependsOnPreviousFileEntityList);
+            entityCollection.addAll(currentFileEntityList);
+            if (!entityCollection.isEmpty()) {
+                // reset the scope is true so that could identify its dependencies again
+                for (Entity entity : entityCollection) {
+                    entity.setInScope(true);
+                }
+                // identify
+                resolveBindings(false, entityCollection);
+            }
+            System.gc();
+            System.runFinalization();
+        }
+    }
 
-	/**
-	 *
-	 * @param callAsImpl
-	 * @return unsolved bindings
-	 */
-	public void resolveBindings(boolean callAsImpl) {
-//		logger.info("Resolve types and bindings of variables, methods and expressions....");
-//		System.out.println("Resolve types and bindings of variables, methods and expressions....");
-		this.potentialExternalDependencies = inferer.resolveAllBindings(callAsImpl,this);
-		if (getExternalDependencies().size() > 0) {
-			System.out.println("There are " + getExternalDependencies().size() + " items are potential external dependencies.");
-		}
-		logger.info("types and bindings resolved successfully...");
-//		System.out.println("types and bindings resolved successfully...");
-	}
+    private void markAllEntitiesScope() {
+        this.entityRepo.getFileEntities().forEach(entity -> {
+            Entity file = entity.getAncestorOfType(FileEntity.class);
+            try {
+                if (!file.getQualifiedName().startsWith(this.inputSrcPath)) {
+                    entity.setInScope(false);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
 
-	private void identifyDependencies() {
-		System.out.println("dependencie data generating...");
-		dependencyMatrix = dependencyGenerator.build(entityRepo, typeFilter);
-		entityRepo = null;
-		System.out.println("reorder dependency matrix...");
-		dependencyMatrix = new OrderedMatrixGenerator(dependencyMatrix).build();
-		System.out.println("Dependencie data generating done successfully...");
-	}
+    private void findFileEntityByFileNameFromEntityRepository(List<String> filePathList, List<Entity> fileEntityList) {
+        Collection<Entity> fileEntityCollection = this.entityRepo.getFileEntities();
+        for (Entity fileEntity : fileEntityCollection) {
+            Entity file = fileEntity.getAncestorOfType(FileEntity.class);
+            if (filePathList.contains(file.getQualifiedName())) {
+                fileEntityList.add(file);
+            }
+        }
+    }
 
-	private final void parseAllFiles() {
-//		System.out.println("Start parsing files...");
-		Set<String> phase2Files = new HashSet<>();
-		FileTraversal fileTransversal = new FileTraversal(new FileTraversal.IFileVisitor() {
-			@Override
-			public void visit(File file) {
-				String fileFullPath = file.getAbsolutePath();
-				fileFullPath = FileUtil.uniqFilePath(fileFullPath);
-				if (!fileFullPath.startsWith(inputSrcPath)) {
-					return;
-				}
-				if (isPhase2Files(fileFullPath)) {
+    private void findDependsOnPreviousFileEntity(List<Entity> previousFileEntityList, List<Entity> dependsOnPreviousFileEntityList) {
+        List<Entity> previousEntityList = new ArrayList<>();
+        getAllEntity(previousFileEntityList, previousEntityList);
+        Collection<Entity> fileEntityCollection = this.entityRepo.getFileEntities();
+        for (Entity fileEntity : fileEntityCollection) {
+            Entity file = fileEntity.getAncestorOfType(FileEntity.class);
+            if (isDependsOnPreviousEntity(file, previousEntityList)) {
+                dependsOnPreviousFileEntityList.add(file);
+            }
+        }
+    }
 
-				} else {
-					parseFile(fileFullPath);
-				}
-			}
+    private void getAllEntity(Collection<Entity> entityList, List<Entity> allEntityList) {
+        for (Entity entity : entityList) {
+            allEntityList.add(entity);
+            getAllEntity(entity.getChildren(), allEntityList);
+        }
+    }
 
-		});
-		fileTransversal.extensionFilter(this.fileSuffixes());
-		fileTransversal.setExcludePaths(this.excludePaths);
-		fileTransversal.travers(this.inputSrcPath);
-		for (String f : phase2Files) {
-			parseFile(f);
-		}
+    private boolean isDependsOnPreviousEntity(Entity entity, List<Entity> previousEntityList) {
+        if (previousEntityList.contains(entity)) {
+            return false;
+        }
+        for (Relation relation : entity.getRelations()) {
+            if (previousEntityList.contains(relation.getEntity())) {
+                return true;
+            }
+        }
+        for (Entity childEntity : entity.getChildren()) {
+            if (isDependsOnPreviousEntity(childEntity, previousEntityList)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-		System.out.println("all files procceed successfully...");
-	}
+    private void updateNewFileEntityPath(List<Entity> fileEntityList) {
+        for (Entity fileEntity : fileEntityList) {
+            String newFilePath = calculateFilePathFromSnapshot(fileEntity.getQualifiedName(), this.projectPath, true);
+            this.entityRepo.updateEntityPath(fileEntity, newFilePath);
+        }
+    }
 
-	protected void parseFile(String fileFullPath) {
-		FileParser fileParser = createFileParser(fileFullPath);
-		try {
-			System.out.println("parsing " + fileFullPath + "...");
-			fileParser.parse();
-		} catch (IOException e) {
-			e.printStackTrace();
-		} catch (Exception e) {
-			System.err.println("error occoured during parse file " + fileFullPath);
-			e.printStackTrace();
-		}
-	}
+    private void removePreviousEntity(Entity entity) {
+        if (entity instanceof FileEntity) {
+            Entity parentEntity = entity.getParent();
+            if (parentEntity instanceof PackageEntity) {
+                parentEntity.getChildren().remove(entity);
+                parentEntity.removeVisible(entity.getQualifiedName());
+            }
+        }
+        this.entityRepo.removeEntity(entity);
+        for (Entity childEntity : entity.getChildren()) {
+            removePreviousEntity(childEntity);
+        }
+    }
 
-	protected boolean isPhase2Files(String fileFullPath) {
-		return false;
-	}
+    private void removeCurrentParentEntity(Entity entity) {
+        if (entity instanceof FileEntity) {
+            Entity parentEntity = entity.getParent();
+            if (parentEntity instanceof PackageEntity) {
+                Collection<Entity> entityCollection = this.entityRepo.getAllEntities();
+                for (Entity e : entityCollection) {
+                    if (e instanceof PackageEntity && e.getQualifiedName().equals(parentEntity.getQualifiedName()) && !e.getId().equals(parentEntity.getId())) {
+                        e.addChild(entity);
+                        entity.setParent(e);
+                        this.entityRepo.putEntityByName(e, e.getQualifiedName());
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
-	public List<String> includePaths() {
-		if (this.includePaths ==null) {
-			this.includePaths = buildIncludePath();
-		}
-		return includePaths;
-	}
+    public void resolveBindings(boolean callAsImpl, Collection<Entity> entityCollection) {
+        this.potentialExternalDependencies = inferer.resolveAllBindings(callAsImpl, entityCollection, this);
+        if (getExternalDependencies().size() > 0) {
+            System.out.println("There are " + getExternalDependencies().size() + " items are potential external dependencies.");
+        }
+    }
 
-	private List<String> buildIncludePath() {
-		includePaths = new ArrayList<String>();
-		for (String path : includeDirs) {
-			if (FileUtils.fileExists(path)) {
-				path = FileUtil.uniqFilePath(path);
-				if (!includePaths.contains(path))
-					includePaths.add(path);
-			}
-			path = this.inputSrcPath + File.separator + path;
-			if (FileUtils.fileExists(path)) {
-				path = FileUtil.uniqFilePath(path);
-				if (!includePaths.contains(path))
-					includePaths.add(path);
-			}
-		}
-		return includePaths;
-	}
+    private void parseAllFiles() {
+        System.out.println("Start parsing files...");
+        FileTraversal fileTransversal = new FileTraversal(file -> {
+            String fileFullPath = file.getAbsolutePath();
+            fileFullPath = FileUtil.uniqFilePath(fileFullPath);
+            if (fileFullPath.startsWith(this.inputSrcPath)) {
+                parseFile(fileFullPath);
+            }
+        });
+        fileTransversal.extensionFilter(this.fileSuffixes());
+        fileTransversal.setExcludePaths(this.excludePaths);
+        fileTransversal.travers(this.inputSrcPath);
+        System.out.println("All files parsed successfully...");
+    }
 
-	public DependencyMatrix getDependencies() {
-		return dependencyMatrix;
-	}
+    protected void parseFile(String fileFullPath) {
+        FileParser fileParser = createFileParser(fileFullPath);
+        try {
+            System.out.println("Parsing " + fileFullPath + "...");
+            fileParser.parse();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println("Error occoured during parse file " + fileFullPath);
+            e.printStackTrace();
+        }
+    }
 
-	public EntityRepo getEntityRepo() {
-		return this.entityRepo;
-	}
+    public List<String> includePaths() {
+        if (this.includePaths == null) {
+            this.includePaths = buildIncludePath();
+        }
+        return includePaths;
+    }
 
-	public void setDependencyGenerator(DependencyGenerator dependencyGenerator) {
-		this.dependencyGenerator = dependencyGenerator;
-	}
+    private List<String> buildIncludePath() {
+        this.includePaths = new ArrayList<>();
+        for (String path : this.includeDirs) {
+            if (FileUtils.fileExists(path)) {
+                path = FileUtil.uniqFilePath(path);
+                if (!this.includePaths.contains(path))
+                    this.includePaths.add(path);
+            }
+            path = this.inputSrcPath + File.separator + path;
+            if (FileUtils.fileExists(path)) {
+                path = FileUtil.uniqFilePath(path);
+                if (!this.includePaths.contains(path))
+                    this.includePaths.add(path);
+            }
+        }
+        return this.includePaths;
+    }
 
-	public abstract List<String> supportedRelations();
+    public DependencyMatrix getDependencies() {
+        return this.dependencyMatrix;
+    }
 
-	public Set<UnsolvedBindings> getExternalDependencies() {
-		return potentialExternalDependencies;
-	}
+    public EntityRepo getEntityRepo() {
+        return this.entityRepo;
+    }
 
-	public String getRelationMapping(String relation) {
-		return relation;
-	}
+    public abstract List<String> supportedRelations();
 
+    public Set<UnsolvedBindings> getExternalDependencies() {
+        return this.potentialExternalDependencies;
+    }
+
+    public String getRelationMapping(String relation) {
+        return relation;
+    }
+
+    public void buildIncludeDirection(boolean isAutoInclude) {
+        if (isAutoInclude) {
+            FolderCollector includePathCollector = new FolderCollector();
+            List<String> additionalIncludePaths = includePathCollector.getFolders(this.inputSrcPath);
+            additionalIncludePaths.addAll(Arrays.asList(this.includeDirs));
+            this.includeDirs = additionalIncludePaths.toArray(new String[]{});
+        }
+    }
 }

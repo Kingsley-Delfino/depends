@@ -30,8 +30,8 @@ public class FunctionEntityImpl extends FunctionEntity {
 				(((FunctionEntity) implementedFunction).getArgSignature().equals(this.getArgSignature())))	{
 			return ;
 		}
-		if(implementedFunction.getMutliDeclare() != null){
-			for(Entity entity : implementedFunction.getMutliDeclare().getEntities()){
+		if(implementedFunction.getMultiDeclare() != null){
+			for(Entity entity : implementedFunction.getMultiDeclare().getEntities()){
 				if(entity instanceof FunctionEntityProto){
 					implementedFunction = entity;
 					if(((FunctionEntity) entity).getArgSignature().equals(implSignature)){

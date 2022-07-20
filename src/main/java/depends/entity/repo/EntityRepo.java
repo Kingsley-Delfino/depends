@@ -44,14 +44,17 @@ public interface EntityRepo extends IdGenerator {
 
 	Iterator<Entity> entityIterator();
 
-	void update(Entity entity);
+	void updateEntityPath(Entity entity, String newPath);
 
 	Collection<Entity> getFileEntities();
+
+	Collection<Entity> getAllEntities();
 
 	Iterator<Entity> sortedFileIterator();
 
 	void addFile(FileEntity currentFileEntity);
 
+	void removeEntity(Entity entity);
 
-
+	void putEntityByName(Entity entity, String name);
 }

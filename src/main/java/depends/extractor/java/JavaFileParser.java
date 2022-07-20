@@ -38,23 +38,22 @@ import depends.extractor.LocCalculator;
 import depends.entity.Entity;
 import depends.entity.FileEntity;
 import depends.entity.repo.EntityRepo;
-import depends.extractor.java.JavaLexer;
-import depends.extractor.java.JavaParser;
 import depends.relations.Inferer;
 
 
-public class JavaFileParser implements depends.extractor.FileParser{
-	private String fileFullPath;
-	private EntityRepo entityRepo;
-	private Inferer inferer;
-	public JavaFileParser(String fileFullPath,EntityRepo entityRepo, Inferer inferer) {
+public class JavaFileParser implements depends.extractor.FileParser {
+    private String fileFullPath;
+    private EntityRepo entityRepo;
+    private Inferer inferer;
+
+    public JavaFileParser(String fileFullPath, EntityRepo entityRepo, Inferer inferer) {
         this.fileFullPath = fileFullPath;
         this.entityRepo = entityRepo;
         this.inferer = inferer;
-	}
+    }
 
-	@Override
-	public void parse() throws IOException {
+    @Override
+    public void parse() throws IOException {
         CharStream input = CharStreams.fromFileName(fileFullPath);
         Lexer lexer = new JavaLexer(input);
         lexer.setInterpreter(new LexerATNSimulator(lexer, lexer.getATN(), lexer.getInterpreter().decisionToDFA, new PredictionContextCache()));
@@ -62,21 +61,20 @@ public class JavaFileParser implements depends.extractor.FileParser{
         JavaParser parser = new JavaParser(tokens);
         ParserATNSimulator interpreter = new ParserATNSimulator(parser, parser.getATN(), parser.getInterpreter().decisionToDFA, new PredictionContextCache());
         parser.setInterpreter(interpreter);
-        JavaListener bridge = new JavaListener(fileFullPath, entityRepo,inferer);
-	    ParseTreeWalker walker = new ParseTreeWalker();
-	    try {
-			JavaParser.CompilationUnitContext ctx = parser.compilationUnit();
-			walker.walk(bridge, ctx);
-			Entity fileEntity = entityRepo.getEntity(fileFullPath);
-			((FileEntity)fileEntity).cacheAllExpressions();
-			fileEntity.setEndLine(ctx.stop.getLine());
-			fileEntity.setLoc(LocCalculator.calcLoc(input.toString()));
-			interpreter.clearDFA();
-			bridge.done();
-	    }catch (Exception e) {
-	    	System.err.println("error encountered during parse..." );
-	    	e.printStackTrace();
-	    }
-	    
+        JavaListener bridge = new JavaListener(fileFullPath, entityRepo, inferer);
+        ParseTreeWalker walker = new ParseTreeWalker();
+        try {
+            JavaParser.CompilationUnitContext ctx = parser.compilationUnit();
+            walker.walk(bridge, ctx);
+            Entity fileEntity = entityRepo.getEntity(fileFullPath);
+            ((FileEntity) fileEntity).cacheAllExpressions();
+            fileEntity.setEndLine(ctx.stop.getLine());
+            fileEntity.setLoc(LocCalculator.calcLoc(input.toString()));
+            interpreter.clearDFA();
+            bridge.done();
+        } catch (Exception e) {
+            System.err.println("error encountered during parse...");
+            e.printStackTrace();
+        }
     }
 }

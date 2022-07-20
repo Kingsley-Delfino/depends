@@ -9,6 +9,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 import static org.junit.Assert.assertEquals;
 
@@ -29,7 +30,7 @@ public class RelationInSameFileTest extends CppParserTest{
 		    CppFileParser parser = createParser(src);
 		    parser.parse();
 	    }
-	    inferer.resolveAllBindings(true,null);
+	    inferer.resolveAllBindings(true,new ArrayList<>(),null);
 	    Entity bar = repo.getEntity(FileUtil.uniqFilePath(srcs[0]));
 	    int matchCount = 0;
 	    for (Relation relation:bar.getRelations()) {

@@ -30,278 +30,304 @@ import depends.relations.Relation;
 import java.util.*;
 
 /**
- * Entity is the root of all entities, including file, package, module, 
+ * Entity is the root of all entities, including file, package, module,
  * class, method/function etc.
  * Each entity has unique id, name,qualifiedName, parent, children
- * We also use entity to record relations 
+ * We also use entity to record relations
  */
 public abstract class Entity {
-	
-    Integer id=-1;
-	String qualifiedName = null;
-	GenericName rawName = GenericName.build("");
-	Entity parent;
-	private MultiDeclareEntities mutliDeclare = null;
-	private Set<Entity> children;
+
+    Integer id = -1;
+    String qualifiedName = null;
+    GenericName rawName = GenericName.build("");
+    Entity parent;
+    private MultiDeclareEntities multiDeclare = null;
+    private Set<Entity> children;
     ArrayList<Relation> relations;
-	private Entity actualReferTo = null;
-	private boolean inScope = true;
-	protected HashMap<String, Entity> visibleNames = new HashMap<>();
-	private Location location = new Location();
-	public Entity() {};
+    private Entity actualReferTo = null;
+    private boolean inScope = true;
+    protected HashMap<String, Entity> visibleNames = new HashMap<>();
+    private Location location = new Location();
+
+    public Entity() {
+    }
+
+    ;
+
     public Entity(GenericName rawName, Entity parent, Integer id) {
-		this.qualifiedName = null;
-		this.rawName = rawName;
-		this.parent = parent;
-		this.id = id;
-		if (parent!=null)
-			parent.addChild(this);
-		deduceQualifiedName();
-		visibleNames.put(rawName.getName(), this);
-		visibleNames.put(qualifiedName, this);
-	}
+        this.qualifiedName = null;
+        this.rawName = rawName;
+        this.parent = parent;
+        this.id = id;
+        if (parent != null)
+            parent.addChild(this);
+        deduceQualifiedName();
+        visibleNames.put(rawName.getName(), this);
+        visibleNames.put(qualifiedName, this);
+    }
 
     private Set<Entity> children() {
-    	if (children==null)
-    		children = new HashSet<>();
-		return children;
-	}
-	/**
+        if (children == null)
+            children = new HashSet<>();
+        return children;
+    }
+
+    /**
      * Rule 1: if it start with '.' , then the name is equal to raw name
      * Rule 2: if parent not exists, the name is equal to raw name
      * Rule 3: if parent exists but no qualified name exists or empty, the name is equal to raw name
      * Rule 4: otherwise, qualified name = parent_qualfied_name + "."+rawName
      * Rule 5: make sure the qualified name do not start with '.'
      */
-	private void deduceQualifiedName() {
-		rawName = rawName.replace("::","." );
-		if (this.rawName.startsWith(".")) {
-			this.qualifiedName = this.rawName.uniqName().substring(1);
-			return; //already qualified
-		}
-		if (parent==null) {
-			this.qualifiedName = this.rawName.uniqName();
-			return;
-		}
-		if (parent.getQualifiedName(true)==null) {
-			this.qualifiedName = this.rawName.uniqName();
-			return;
-		}
-		if (parent.getQualifiedName(true).isEmpty()) {
-			this.qualifiedName = rawName.uniqName();
-			return;
-		}
-		this.qualifiedName= parent.getQualifiedName(true)+"." + rawName.uniqName();
-	}
+    private void deduceQualifiedName() {
+        rawName = rawName.replace("::", ".");
+        if (this.rawName.startsWith(".")) {
+            this.qualifiedName = this.rawName.uniqName().substring(1);
+            return; //already qualified
+        }
+        if (parent == null) {
+            this.qualifiedName = this.rawName.uniqName();
+            return;
+        }
+        if (parent.getQualifiedName(true) == null) {
+            this.qualifiedName = this.rawName.uniqName();
+            return;
+        }
+        if (parent.getQualifiedName(true).isEmpty()) {
+            this.qualifiedName = rawName.uniqName();
+            return;
+        }
+        this.qualifiedName = parent.getQualifiedName(true) + "." + rawName.uniqName();
+    }
 
 
-	public GenericName getRawName() {
-		return rawName;
-	}
+    public GenericName getRawName() {
+        return rawName;
+    }
 
-	public Integer getId() {
+    public Integer getId() {
         return id;
     }
 
     public void addRelation(Relation relation) {
-    	if (relations==null)
-    		relations = new ArrayList<>();
-    	if (relation.getEntity()==null) return;
+        if (relations == null)
+            relations = new ArrayList<>();
+        if (relation.getEntity() == null) return;
         relations.add(relation);
     }
 
     public ArrayList<Relation> getRelations() {
-    	if (relations==null)
-    		return new ArrayList<>();
+        if (relations == null)
+            return new ArrayList<>();
         return relations;
     }
 
-    public void addChild(Entity child) {
-    	children().add(child);
-		visibleNames.put(child.getRawName().getName(), child);
-		visibleNames.put(child.getQualifiedName(), child);
+    public void clearRelations() {
+        this.relations = new ArrayList<>();
     }
 
-	public Entity getParent() {
-		return parent;
-	}
+    public void addChild(Entity child) {
+        children().add(child);
+        visibleNames.put(child.getRawName().getName(), child);
+        visibleNames.put(child.getQualifiedName(), child);
+    }
 
-	public void setParent(Entity parent) {
-		this.parent = parent;
-	}
-	
-	public Collection<Entity> getChildren() {
-		if (children==null)
-			return new HashSet<>();
-		return children;
-	}
-	
-	public void setQualifiedName(String qualifiedName) {
-		this.qualifiedName = qualifiedName;
-	}
+    public Entity getParent() {
+        return parent;
+    }
 
-	public void setRawName(GenericName rawName) {
-		this.rawName = rawName;
-		deduceQualifiedName();
-	}
-	
-	public final String getQualifiedName() {
-		return qualifiedName;
-	}
+    public void setParent(Entity parent) {
+        this.parent = parent;
+    }
 
-	public String getQualifiedName(boolean overrideFileWithPackage) {
-		return qualifiedName;
-	}
+    public Collection<Entity> getChildren() {
+        if (children == null)
+            return new HashSet<>();
+        return children;
+    }
 
-	@Override
-	public String toString() {
-		return "Entity [id=" + id + ", qualifiedName=" + qualifiedName + ", rawName=" + rawName + "]";
-	}
+    public void setQualifiedName(String qualifiedName) {
+        this.qualifiedName = qualifiedName;
+    }
 
-	/**
-	 * Get ancestor of type.  
-	 * @param classType
-	 * @return null (if not exist) or the type
-	 */
-	public Entity getAncestorOfType(@SuppressWarnings("rawtypes") Class classType) {
-		Entity fromEntity = this;
-		while(fromEntity!=null) {
-			if (fromEntity.getClass().equals(classType))
-				return fromEntity;
-			if (fromEntity.getParent()==null) return null;
-			fromEntity = fromEntity.getParent();
-		}
-		return null;
-	}
+    public void setRawName(GenericName rawName) {
+        this.rawName = rawName;
+        deduceQualifiedName();
+    }
 
-	/**
-	 * Invoke inferer to resolve the entity type etc. 
-	 * */
-	public void inferEntities(Inferer inferer) {
-		inferLocalLevelEntities(inferer);
-		for (Entity child:this.getChildren()) {
-			child.inferEntities(inferer);
-		}
-	}
-	public abstract void inferLocalLevelEntities(Inferer inferer);
-	
-	public TypeEntity getType() {
-		return null;
-	}
+    public final String getQualifiedName() {
+        return qualifiedName;
+    }
 
-	public String getDisplayName() {
-		return getRawName().uniqName();
-	}
+    public String getQualifiedName(boolean overrideFileWithPackage) {
+        return qualifiedName;
+    }
 
-	public MultiDeclareEntities getMutliDeclare() {
-		return mutliDeclare;
-	}
+    @Override
+    public String toString() {
+        return "Entity [id=" + id + ", qualifiedName=" + qualifiedName + ", rawName=" + rawName + "]";
+    }
 
-	public void setMutliDeclare(MultiDeclareEntities mutliDeclare) {
-		this.mutliDeclare = mutliDeclare;
-	}
+    /**
+     * Get ancestor of type.
+     *
+     * @return null (if not exist) or the type
+     */
+    public Entity getAncestorOfType(@SuppressWarnings("rawtypes") Class classType) {
+        Entity fromEntity = this;
+        while (fromEntity != null) {
+            if (fromEntity.getClass().equals(classType))
+                return fromEntity;
+            if (fromEntity.getParent() == null) return null;
+            fromEntity = fromEntity.getParent();
+        }
+        return null;
+    }
 
-	public Entity getActualReferTo() {
-		if (this.actualReferTo ==null)
-			return this;
-		return actualReferTo;
-	}
-	
-	public void setActualReferTo(Entity actualReferTo) {
-		this.actualReferTo = actualReferTo;
-	}
+    /**
+     * Invoke inferer to resolve the entity type etc.
+     */
+    public void inferEntities(Inferer inferer) {
+        inferLocalLevelEntities(inferer);
+        for (Entity child : this.getChildren()) {
+            child.inferEntities(inferer);
+        }
+    }
 
-	public static void setParent(Entity child, Entity parent) {
-		if (parent == null)
-			return;
-		if (child == null)
-			return;
-		if (parent.equals(child.getParent()))
-			return;
-		child.setParent(parent);
-		parent.addChild(child);
-	}
-	@Override
-	public int hashCode() {
-		final int prime = 31;
-		int result = 1;
-		result = prime * result + ((id == null) ? 0 : id.hashCode());
-		return result;
-	}
-	
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		Entity other = (Entity) obj;
-		if (id == null) {
-			if (other.id != null)
-				return false;
-		} else if (!id.equals(other.id))
-			return false;
-		return true;
-	}
-	
-	public void setInScope(boolean value) {
-		this.inScope  = value;
-		children().forEach(child->child.setInScope(value));
-	}
-	
-	public boolean inScope() {
-		return inScope;
-	}
-	public Entity getByName(String name, HashSet<Entity> searched) {
-		if (searched.contains(this)) return null;
-		searched.add(this);
-		return visibleNames.get(name);
-	}
-	public Integer getStartLine() {
-		return location.getStartLine();
-	}	
-	public void setStartLine(int lineNumber) {
-		this.location.setStartLine(lineNumber);
-	}
+    public abstract void inferLocalLevelEntities(Inferer inferer);
 
-	public Integer getEndLine() {
-		return location.getEndLine();
-	}
-	public void setEndLine(int lineNumber) {
-		this.location.setEndLine(lineNumber);
-	}
+    public TypeEntity getType() {
+        return null;
+    }
 
-	public Integer getLoc() {
-		return location.getLoc();
-	}
-	public void setLoc(int lineNumber) {
-		this.location.setLoc(lineNumber);
-	}
+    public String getDisplayName() {
+        return getRawName().uniqName();
+    }
 
-	public Location getLocation() {
-		return this.location;
-	}
+    public MultiDeclareEntities getMultiDeclare() {
+        return multiDeclare;
+    }
 
-	private int offSetInFile = -1;
+    public void setMultiDeclare(MultiDeclareEntities multiDeclare) {
+        this.multiDeclare = multiDeclare;
+    }
 
-	public int getOffSetInFile() {
-		return offSetInFile;
-	}
+    public Entity getActualReferTo() {
+        if (this.actualReferTo == null)
+            return this;
+        return actualReferTo;
+    }
 
-	public void setOffSetInFile(int offSetInFile) {
-		this.offSetInFile = offSetInFile;
-	}
+    public void setActualReferTo(Entity actualReferTo) {
+        this.actualReferTo = actualReferTo;
+    }
 
-	public void levelCrossedLookup(Entity grandson) {
-		visibleNames.put(grandson.getRawName().getName(), grandson);
-		String preName = grandson.getQualifiedName();
-		if(preName.lastIndexOf(grandson.getParent().getRawName().getName() + ".") == -1) {
-			visibleNames.put(preName, grandson);
-		} else {
-			String newName = preName.substring(0, preName.lastIndexOf(grandson.getParent().getRawName().getName() + ".")) + grandson.getRawName().getName();
-			visibleNames.put(newName, grandson);
-		}
-	}
+    public static void setParent(Entity child, Entity parent) {
+        if (parent == null)
+            return;
+        if (child == null)
+            return;
+        if (parent.equals(child.getParent()))
+            return;
+        child.setParent(parent);
+        parent.addChild(child);
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((id == null) ? 0 : id.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        Entity other = (Entity) obj;
+        if (id == null) {
+            if (other.id != null)
+                return false;
+        } else if (!id.equals(other.id))
+            return false;
+        return true;
+    }
+
+    public void setInScope(boolean value) {
+        this.inScope = value;
+        children().forEach(child -> child.setInScope(value));
+    }
+
+    public boolean inScope() {
+        return inScope;
+    }
+
+    public Entity getByName(String name, HashSet<Entity> searched) {
+        if (searched.contains(this)) return null;
+        searched.add(this);
+        return visibleNames.get(name);
+    }
+
+    public Integer getStartLine() {
+        return location.getStartLine();
+    }
+
+    public void setStartLine(int lineNumber) {
+        this.location.setStartLine(lineNumber);
+    }
+
+    public Integer getEndLine() {
+        return location.getEndLine();
+    }
+
+    public void setEndLine(int lineNumber) {
+        this.location.setEndLine(lineNumber);
+    }
+
+    public Integer getLoc() {
+        return location.getLoc();
+    }
+
+    public void setLoc(int lineNumber) {
+        this.location.setLoc(lineNumber);
+    }
+
+    public Location getLocation() {
+        return this.location;
+    }
+
+    private int offSetInFile = -1;
+
+    public int getOffSetInFile() {
+        return offSetInFile;
+    }
+
+    public void setOffSetInFile(int offSetInFile) {
+        this.offSetInFile = offSetInFile;
+    }
+
+    public void levelCrossedLookup(Entity grandson) {
+        visibleNames.put(grandson.getRawName().getName(), grandson);
+        String preName = grandson.getQualifiedName();
+        if (preName.lastIndexOf(grandson.getParent().getRawName().getName() + ".") == -1) {
+            visibleNames.put(preName, grandson);
+        } else {
+            String newName = preName.substring(0, preName.lastIndexOf(grandson.getParent().getRawName().getName() + ".")) + grandson.getRawName().getName();
+            visibleNames.put(newName, grandson);
+        }
+    }
+
+    public void updateEntityPath(String newPath) {
+        this.visibleNames.remove(this.qualifiedName);
+        this.visibleNames.put(newPath, this);
+    }
+
+    public void removeVisible(String name) {
+        this.visibleNames.remove(name);
+    }
 }

@@ -54,7 +54,7 @@ public class MultiDeclareEntities extends ContainerEntity {
 	}
 
 	public void add(Entity entity) {
-		entity.setMutliDeclare(this);
+		entity.setMultiDeclare(this);
 		if (entity instanceof TypeEntity) 
 			this.containsTypeEntity = true;
 		

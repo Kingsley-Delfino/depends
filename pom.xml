@@ -251,6 +251,18 @@
             <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>5.8.0.202006091008-r</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.emergentdesign.se</groupId>
+            <artifactId>CLDIFF</artifactId>
+            <version>0.0.1</version>
+            <scope>system</scope>
+            <systemPath>${pom.basedir}/jars/CLDIFF-0.0.1-jar-with-dependencies.jar</systemPath>
+        </dependency>
 
         <!-- ... -->
     </dependencies>

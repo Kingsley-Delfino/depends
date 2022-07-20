@@ -18,7 +18,7 @@ public class PathConverter {
             Entity possibleEntity = fromEntity.getByName(preName, new HashSet<>());
             if(possibleEntity != null) {
                 if(possibleEntity.getClass() == clas) return possibleEntity;
-                MultiDeclareEntities multiDeclareEntities = possibleEntity.getMutliDeclare();
+                MultiDeclareEntities multiDeclareEntities = possibleEntity.getMultiDeclare();
                 if(multiDeclareEntities != null){
                     List<Entity> multi = multiDeclareEntities.getEntities();
                     for(Entity entity : multi){
