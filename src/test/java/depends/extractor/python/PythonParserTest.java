@@ -23,8 +23,7 @@ public abstract class PythonParserTest extends ParserTest implements ParserCreat
 		List<String> includeDir = new ArrayList<>();
 		includeDir.add("./src/test/resources/python-code-examples/");
 		this.p = new PythonProcessor();
-		p.includeDirs = includeDir.toArray(new String[] {});
-		
+		p.includePaths = includeDir;
 		this.repo = p.getEntityRepo();
 		this.inferer = p.inferer;
     	TemporaryFile.reset();

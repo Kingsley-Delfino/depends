@@ -26,6 +26,7 @@ package depends;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.codehaus.plexus.util.StringUtils;
@@ -137,7 +138,8 @@ public class Main {
             dependencyGenerator.setGenerateDetail(true);
         }
         dependencyGenerator.setFilenameRewritter(filenameWritter);
-        langProcessor.buildDependencies(inputDir, includeDir, app.isOutputExternalDependencies(), app.isDuckTypingDeduce(), new ArrayList<>());
+        langProcessor.initial(inputDir, new ArrayList<>(Arrays.asList(includeDir)), new ArrayList<>(), app.getLang().equals("cpp"), app.isOutputExternalDependencies(), app.isDuckTypingDeduce());
+        langProcessor.buildDependencies();
         long endTime = System.currentTimeMillis();
         TemporaryFile.getInstance().delete();
         CacheManager.create().shutdown();

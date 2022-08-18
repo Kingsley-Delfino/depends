@@ -60,7 +60,7 @@ public class FileUtil {
         return array[0] + "/curr";
     }
 
-    public static void getTestPath(List<String> testPathList, String[] pathArray) {
+    public static void getTestPath(List<String> testPathList, List<String> pathArray) {
         for (String path : pathArray) {
             if (path.endsWith("/test")) {
                 testPathList.add(path);

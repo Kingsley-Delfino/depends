@@ -52,8 +52,6 @@ public abstract class Entity {
     public Entity() {
     }
 
-    ;
-
     public Entity(GenericName rawName, Entity parent, Integer id) {
         this.qualifiedName = null;
         this.rawName = rawName;

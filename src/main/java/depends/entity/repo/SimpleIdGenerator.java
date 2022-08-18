@@ -15,4 +15,8 @@ public class SimpleIdGenerator implements IdGenerator {
 		return nextAvaliableIndex++;
 	}
 
+	@Override
+	public void setId(int id) {
+		this.nextAvaliableIndex = id;
+	}
 }

@@ -24,7 +24,6 @@ SOFTWARE.
 
 package depends.extractor;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
@@ -33,7 +32,6 @@ import depends.extractor.git.CommitExtractor;
 import depends.extractor.git.GitExtractor;
 import depends.relations.Relation;
 import multilang.depends.util.file.FolderCollector;
-import org.codehaus.plexus.util.FileUtils;
 import org.eclipse.jgit.revwalk.RevCommit;
 
 import depends.entity.Entity;
@@ -79,15 +77,25 @@ abstract public class AbstractLangProcessor {
     protected EntityRepo entityRepo;
     DependencyMatrix dependencyMatrix;
     private String projectPath;
-    protected String inputSrcPath;
-    public String[] includeDirs;
-    private Set<UnsolvedBindings> potentialExternalDependencies;
-    private List<String> includePaths;
+    protected String snapshotProjectPath;
+    public List<String> includePaths;
     public List<String> excludePaths;
+    private Set<UnsolvedBindings> potentialExternalDependencies;
+    private boolean isCallAsImpl;
 
     public AbstractLangProcessor(boolean eagerExpressionResolve) {
         entityRepo = new InMemoryEntityRepo();
         inferer = new Inferer(entityRepo, getImportLookupStrategy(), getBuiltInType(), eagerExpressionResolve);
+    }
+
+    public void initial(String inputDir, List<String> includePaths, List<String> excludePaths, boolean isCallAsImpl, boolean isCollectUnsolvedBindings, boolean isDuckTypingDeduce) {
+        this.projectPath = inputDir;
+        this.snapshotProjectPath = inputDir;
+        this.includePaths = includePaths;
+        this.excludePaths = excludePaths;
+        this.isCallAsImpl = isCallAsImpl;
+        this.inferer.setCollectUnsolvedBindings(isCollectUnsolvedBindings);
+        this.inferer.setDuckTypingDeduce(isDuckTypingDeduce);
     }
 
     /**
@@ -96,96 +104,100 @@ abstract public class AbstractLangProcessor {
      * Step 2: resolve bindings of files (if not resolved yet);
      * Step 3: identify dependencies.
      */
-    public void buildDependencies(String inputDir, String[] includeDir, boolean isCollectUnsolvedBindings, boolean isDuckTypingDeduce, List<String> excludePaths) {
-        this.projectPath = inputDir;
-        this.inputSrcPath = inputDir;
-        this.includeDirs = includeDir;
-        this.excludePaths = excludePaths;
-        this.inferer.setCollectUnsolvedBindings(isCollectUnsolvedBindings);
-        this.inferer.setDuckTypingDeduce(isDuckTypingDeduce);
+    public void buildDependencies() {
         String since = "2022-04-04 00:00:00";
         String until = "2022-07-05 23:59:59";
         GitExtractor gitExtractor = new GitExtractor("/Users/kingsley/FDSE/multi-dependency/CodeSource/Java/commons-io");
+        String CLDiffOutputPath = "/Users/kingsley/FDSE/GraduationProject/CLDiff/Java";
         List<RevCommit> commits = gitExtractor.getRangeCommits(since, until, false);
         if (!commits.isEmpty()) {
             gitExtractor.checkOutToCommit(commits.get(commits.size() - 1), this.projectPath);
         }
         buildDependenciesForInitialVersion();
-        buildDependenciesForIncrementalVersion(gitExtractor, commits);
+        buildDependenciesForIncrementalVersion(gitExtractor, commits, CLDiffOutputPath);
     }
 
-    public void buildDependenciesForInitialVersion() {
+    public EntityRepo buildDependenciesForInitialVersion() {
         // for this search (isAutoInclude = true)
         buildIncludeDirection(true);
         parseAllFiles();
         markAllEntitiesScope();
-        // for java (callAsImpl = false)
-        resolveBindings(false, this.entityRepo.getFileEntities());
+        resolveBindings(this.entityRepo.getFileEntities());
         System.gc();
         System.runFinalization();
+        return this.entityRepo;
     }
 
-    public void buildDependenciesForIncrementalVersion(GitExtractor gitExtractor, List<RevCommit> commits) {
+    public void buildDependenciesForIncrementalVersion(GitExtractor gitExtractor, List<RevCommit> commits, String CLDiffOutputPath) {
         CommitExtractor commitExtractor = new CommitExtractor(gitExtractor);
         for (int i = commits.size() - 2; i >= 0; i--) {
             RevCommit commit = commits.get(i);
-            System.out.println("\nCommit: " + commit.getName());
-            List<String> currentFilePathList = new ArrayList<>();
-            List<String> currentSnapshotFilePathList = new ArrayList<>();
-            List<String> previousFilePathList = new ArrayList<>();
-            List<Entity> currentFileEntityList = new ArrayList<>();
-            List<Entity> previousFileEntityList = new ArrayList<>();
-            // those file entities that depend on previous file entities, we need to identify dependencies of them to current file entities
-            List<Entity> dependsOnPreviousFileEntityList = new ArrayList<>();
-            commitExtractor.getChangedFilePath(commit, currentFilePathList, currentSnapshotFilePathList, previousFilePathList, this.projectPath);
-            if (!previousFilePathList.isEmpty()) {
-                // find previous file entities
-                findFileEntityByFileNameFromEntityRepository(previousFilePathList, previousFileEntityList);
-                // find entities that depend on previous file entities
-                findDependsOnPreviousFileEntity(previousFileEntityList, dependsOnPreviousFileEntityList);
-                // remove previous file entities and their children from entity repository
-                for (Entity entity : previousFileEntityList) {
-                    removePreviousEntity(entity);
-                }
-            }
-            if (!currentFilePathList.isEmpty()) {
-                this.inputSrcPath = getProjectPath(currentSnapshotFilePathList.get(0));
-                this.includeDirs = new String[0];
-                buildIncludeDirection(true);
-                this.excludePaths = new ArrayList<>();
-                getTestPath(this.excludePaths, this.includeDirs);
-                parseAllFiles();
-                // find current file entities
-                findFileEntityByFileNameFromEntityRepository(currentSnapshotFilePathList, currentFileEntityList);
-                // change current file path to previous path
-                updateNewFileEntityPath(currentFileEntityList);
-                // delete current packages and add current file entities to previous packages
-                for (Entity entity : currentFileEntityList) {
-                    removeCurrentParentEntity(entity);
-                }
-            }
-            // identify dependencies again
-            Collection<Entity> entityCollection = new ArrayList<>();
-            entityCollection.addAll(dependsOnPreviousFileEntityList);
-            entityCollection.addAll(currentFileEntityList);
-            if (!entityCollection.isEmpty()) {
-                // reset the scope is true so that could identify its dependencies again
-                for (Entity entity : entityCollection) {
-                    entity.setInScope(true);
-                }
-                // identify
-                resolveBindings(false, entityCollection);
-            }
-            System.gc();
-            System.runFinalization();
+            Map<String, Entity> previousFileEntityMap = new HashMap<>();
+            Map<String, Entity> currentFileEntityMap = new HashMap<>();
+            List<String> removedFilePathList = new ArrayList<>();
+            List<String> addedFilePathList = new ArrayList<>();
+            List<String> modifiedFilePathList = new ArrayList<>();
+            // key-value: previousFilePath-currentFilePath
+            Map<String, String> renamedFilePathMap = new HashMap<>();
+            buildDependenciesForIncrementalVersion(commitExtractor, commit, CLDiffOutputPath, previousFileEntityMap, currentFileEntityMap, removedFilePathList, addedFilePathList, modifiedFilePathList, renamedFilePathMap);
         }
+    }
+
+    public void buildDependenciesForIncrementalVersion(CommitExtractor commitExtractor, RevCommit commit, String CLDiffOutputPath, Map<String, Entity> previousFileEntityMap, Map<String, Entity> currentFileEntityMap, List<String> removedFilePathList, List<String> addedFilePathList, List<String> modifiedFilePathList, Map<String, String> renamedFilePathMap) {
+        System.out.println("\nCommit: " + commit.getName());
+        List<String> previousFilePathList = new ArrayList<>();
+        List<String> currentFilePathList = new ArrayList<>();
+        List<String> currentSnapshotFilePathList = new ArrayList<>();
+        // 对于那些依赖于发生了修改的文件的实体，需要对其进行重新扫描，让其依赖于新的文件
+        List<Entity> dependsOnPreviousFileEntityList = new ArrayList<>();
+        commitExtractor.getChangedFilePath(commit, this.projectPath, CLDiffOutputPath, currentFilePathList, currentSnapshotFilePathList, previousFilePathList, removedFilePathList, addedFilePathList, modifiedFilePathList, renamedFilePathMap);
+        if (!previousFilePathList.isEmpty()) {
+            // 寻找修改之前的文件实体
+            findFileEntityByFileNameFromEntityRepository(previousFilePathList, previousFileEntityMap);
+            // 寻找依赖于修改的文件的实体（包括子实体）
+            findDependsOnPreviousFileEntity(previousFileEntityMap.values(), dependsOnPreviousFileEntityList);
+            // 将修改的文件实体和其子实体从总的数据库中移除
+            for (Entity entity : previousFileEntityMap.values()) {
+                removePreviousEntity(entity);
+            }
+        }
+        if (!currentFilePathList.isEmpty()) {
+            this.snapshotProjectPath = getProjectPath(currentSnapshotFilePathList.get(0));
+            this.includePaths.clear();
+            buildIncludeDirection(true);
+            this.excludePaths = new ArrayList<>();
+            getTestPath(this.excludePaths, this.includePaths);
+            parseAllFiles();
+            // 寻找修改之后的文件实体
+            findFileEntityByFileNameFromEntityRepository(currentSnapshotFilePathList, currentFileEntityMap);
+            // 修改新文件实体的路径
+            updateNewFileEntityPath(currentFileEntityMap);
+            // 若新文件所在包在此之前就已经存在，则删除新建的包，并将新文件加到旧包中
+            for (Entity entity : currentFileEntityMap.values()) {
+                removeCurrentParentEntity(entity);
+            }
+        }
+        // 重新确定依赖，包括修改的文件和依赖修改的文件的文件
+        Collection<Entity> entityCollection = new ArrayList<>();
+        entityCollection.addAll(dependsOnPreviousFileEntityList);
+        entityCollection.addAll(currentFileEntityMap.values());
+        if (!entityCollection.isEmpty()) {
+            // 重新设置scope为true，以便可以再次确定依赖
+            for (Entity entity : entityCollection) {
+                entity.setInScope(true);
+            }
+            // 确定依赖
+            resolveBindings(entityCollection);
+        }
+        System.gc();
+        System.runFinalization();
     }
 
     private void markAllEntitiesScope() {
         this.entityRepo.getFileEntities().forEach(entity -> {
             Entity file = entity.getAncestorOfType(FileEntity.class);
             try {
-                if (!file.getQualifiedName().startsWith(this.inputSrcPath)) {
+                if (!file.getQualifiedName().startsWith(this.snapshotProjectPath)) {
                     entity.setInScope(false);
                 }
             } catch (Exception e) {
@@ -194,19 +206,19 @@ abstract public class AbstractLangProcessor {
         });
     }
 
-    private void findFileEntityByFileNameFromEntityRepository(List<String> filePathList, List<Entity> fileEntityList) {
+    private void findFileEntityByFileNameFromEntityRepository(List<String> filePathList, Map<String, Entity> fileEntityMap) {
         Collection<Entity> fileEntityCollection = this.entityRepo.getFileEntities();
         for (Entity fileEntity : fileEntityCollection) {
             Entity file = fileEntity.getAncestorOfType(FileEntity.class);
             if (filePathList.contains(file.getQualifiedName())) {
-                fileEntityList.add(file);
+                fileEntityMap.put(file.getQualifiedName(), file);
             }
         }
     }
 
-    private void findDependsOnPreviousFileEntity(List<Entity> previousFileEntityList, List<Entity> dependsOnPreviousFileEntityList) {
+    private void findDependsOnPreviousFileEntity(Collection<Entity> previousFileEntityCollection, List<Entity> dependsOnPreviousFileEntityList) {
         List<Entity> previousEntityList = new ArrayList<>();
-        getAllEntity(previousFileEntityList, previousEntityList);
+        getAllEntity(previousFileEntityCollection, previousEntityList);
         Collection<Entity> fileEntityCollection = this.entityRepo.getFileEntities();
         for (Entity fileEntity : fileEntityCollection) {
             Entity file = fileEntity.getAncestorOfType(FileEntity.class);
@@ -216,8 +228,8 @@ abstract public class AbstractLangProcessor {
         }
     }
 
-    private void getAllEntity(Collection<Entity> entityList, List<Entity> allEntityList) {
-        for (Entity entity : entityList) {
+    private void getAllEntity(Collection<Entity> entityCollection, List<Entity> allEntityList) {
+        for (Entity entity : entityCollection) {
             allEntityList.add(entity);
             getAllEntity(entity.getChildren(), allEntityList);
         }
@@ -240,10 +252,13 @@ abstract public class AbstractLangProcessor {
         return false;
     }
 
-    private void updateNewFileEntityPath(List<Entity> fileEntityList) {
+    private void updateNewFileEntityPath(Map<String, Entity> currentFileEntityMap) {
+        List<Entity> fileEntityList = new ArrayList<>(currentFileEntityMap.values());
+        currentFileEntityMap.clear();
         for (Entity fileEntity : fileEntityList) {
             String newFilePath = calculateFilePathFromSnapshot(fileEntity.getQualifiedName(), this.projectPath, true);
             this.entityRepo.updateEntityPath(fileEntity, newFilePath);
+            currentFileEntityMap.put(newFilePath, fileEntity);
         }
     }
 
@@ -278,8 +293,8 @@ abstract public class AbstractLangProcessor {
         }
     }
 
-    public void resolveBindings(boolean callAsImpl, Collection<Entity> entityCollection) {
-        this.potentialExternalDependencies = inferer.resolveAllBindings(callAsImpl, entityCollection, this);
+    public void resolveBindings(Collection<Entity> entityCollection) {
+        this.potentialExternalDependencies = inferer.resolveAllBindings(this.isCallAsImpl, entityCollection, this);
         if (getExternalDependencies().size() > 0) {
             System.out.println("There are " + getExternalDependencies().size() + " items are potential external dependencies.");
         }
@@ -290,13 +305,13 @@ abstract public class AbstractLangProcessor {
         FileTraversal fileTransversal = new FileTraversal(file -> {
             String fileFullPath = file.getAbsolutePath();
             fileFullPath = FileUtil.uniqFilePath(fileFullPath);
-            if (fileFullPath.startsWith(this.inputSrcPath)) {
+            if (fileFullPath.startsWith(this.snapshotProjectPath)) {
                 parseFile(fileFullPath);
             }
         });
         fileTransversal.extensionFilter(this.fileSuffixes());
         fileTransversal.setExcludePaths(this.excludePaths);
-        fileTransversal.travers(this.inputSrcPath);
+        fileTransversal.travers(this.snapshotProjectPath);
         System.out.println("All files parsed successfully...");
     }
 
@@ -314,27 +329,6 @@ abstract public class AbstractLangProcessor {
     }
 
     public List<String> includePaths() {
-        if (this.includePaths == null) {
-            this.includePaths = buildIncludePath();
-        }
-        return includePaths;
-    }
-
-    private List<String> buildIncludePath() {
-        this.includePaths = new ArrayList<>();
-        for (String path : this.includeDirs) {
-            if (FileUtils.fileExists(path)) {
-                path = FileUtil.uniqFilePath(path);
-                if (!this.includePaths.contains(path))
-                    this.includePaths.add(path);
-            }
-            path = this.inputSrcPath + File.separator + path;
-            if (FileUtils.fileExists(path)) {
-                path = FileUtil.uniqFilePath(path);
-                if (!this.includePaths.contains(path))
-                    this.includePaths.add(path);
-            }
-        }
         return this.includePaths;
     }
 
@@ -359,9 +353,7 @@ abstract public class AbstractLangProcessor {
     public void buildIncludeDirection(boolean isAutoInclude) {
         if (isAutoInclude) {
             FolderCollector includePathCollector = new FolderCollector();
-            List<String> additionalIncludePaths = includePathCollector.getFolders(this.inputSrcPath);
-            additionalIncludePaths.addAll(Arrays.asList(this.includeDirs));
-            this.includeDirs = additionalIncludePaths.toArray(new String[]{});
+            this.includePaths = includePathCollector.getFolders(this.snapshotProjectPath);
         }
     }
 }

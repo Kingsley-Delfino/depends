@@ -64,7 +64,7 @@ public class CppProcessor extends AbstractLangProcessor {
 			macroRepo.buildDefaultMap(super.includePaths());
 		}
 		if (preprocessorHandler==null) {
-			preprocessorHandler = new PreprocessorHandler(super.inputSrcPath,super.includePaths(), super.excludePaths);
+			preprocessorHandler = new PreprocessorHandler(super.snapshotProjectPath,super.includePaths(), super.excludePaths);
 		}
 		return new CdtCppFileParser(fileFullPath, entityRepo, preprocessorHandler, inferer, macroRepo);
 	}

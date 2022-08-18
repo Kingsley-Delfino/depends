@@ -31,4 +31,6 @@ public interface IdGenerator {
 	 * @return the unique id
 	 */
 	Integer generateId();
+
+	void setId(int id);
 }

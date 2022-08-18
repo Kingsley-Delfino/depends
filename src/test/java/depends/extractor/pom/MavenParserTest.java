@@ -21,7 +21,7 @@ public abstract class MavenParserTest extends ParserTest{
 		includeDir.add("./src/test/resources/maven-code-examples/dependencyWithoutVersion");
 		
 		this.p = new PomProcessor();
-		p.includeDirs = includeDir.toArray(new String[] {});
+		p.includePaths = includeDir;
 		
 		this.repo = p.getEntityRepo();
 		this.inferer = p.inferer;
