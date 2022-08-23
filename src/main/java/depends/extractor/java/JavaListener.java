@@ -31,10 +31,13 @@ import depends.extractor.java.context.*;
 import depends.importtypes.ExactMatchImport;
 import depends.relations.Inferer;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ParseTree;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class JavaListener extends JavaParserBaseListener {
 	private final JavaHandlerContext context;
@@ -96,6 +99,7 @@ public class JavaListener extends JavaParserBaseListener {
 		if (ctx.classBody().RBRACE() != null) {
 			type.setEndLine(ctx.classBody().RBRACE().getSymbol().getLine());
 		}
+		processTypeEntity(type, ctx);
 		super.enterClassDeclaration(ctx);
 	}
 
@@ -115,6 +119,8 @@ public class JavaListener extends JavaParserBaseListener {
 		if (ctx.RBRACE() != null) {
 			type.setEndLine(ctx.RBRACE().getSymbol().getLine());
 		}
+		processTypeEntity(type, ctx);
+		type.setEnum(true);
 		super.enterEnumDeclaration(ctx);
 	}
 
@@ -128,6 +134,7 @@ public class JavaListener extends JavaParserBaseListener {
 		if (ctx.annotationTypeBody().RBRACE() != null) {
 			type.setEndLine(ctx.annotationTypeBody().RBRACE().getSymbol().getLine());
 		}
+		processTypeEntity(type, ctx);
 		super.enterAnnotationTypeDeclaration(ctx);
 	}
 	
@@ -161,6 +168,8 @@ public class JavaListener extends JavaParserBaseListener {
 		if (ctx.interfaceBody().RBRACE() != null) {
 			type.setEndLine(ctx.interfaceBody().RBRACE().getSymbol().getLine());
 		}
+		processTypeEntity(type, ctx);
+		type.setInterface(true);
 		super.enterInterfaceDeclaration(ctx);
 	}
 
@@ -202,6 +211,7 @@ public class JavaListener extends JavaParserBaseListener {
 //			method.setStartLine(ctx.start.getLine());
 			method.setEndLine(ctx.stop.getLine());
 		}
+		processFunctionEntity(method, ctx);
 	}
 
 	@Override
@@ -237,7 +247,10 @@ public class JavaListener extends JavaParserBaseListener {
 		} else {
 //			method.setStartLine(ctx.start.getLine());
 			method.setEndLine(ctx.stop.getLine());
+			// 接口的抽象方法，默认使用abstract
+			method.setAbstract(true);
 		}
+		processFunctionEntity(method, ctx);
 	}
 
 	@Override
@@ -264,6 +277,7 @@ public class JavaListener extends JavaParserBaseListener {
 //			method.setStartLine(ctx.start.getLine());
 			method.setEndLine(ctx.stop.getLine());
 		}
+		processFunctionEntity(method, ctx);
 	}
 
 	@Override
@@ -286,6 +300,7 @@ public class JavaListener extends JavaParserBaseListener {
 			} else {
 				var.setEndLine(ctx.getStart().getLine());
 			}
+			processVariableEntity(var, ctx);
 		}
 		annotationProcessor.processAnnotationModifier(ctx, ClassBodyDeclarationContext.class,"modifier.classOrInterfaceModifier.annotation",vars);
 		super.enterFieldDeclaration(ctx);
@@ -308,6 +323,7 @@ public class JavaListener extends JavaParserBaseListener {
 			} else {
 				var.setEndLine(ctx.getStart().getLine());
 			}
+			processVariableEntity(var, ctx);
 		}
 		annotationProcessor.processAnnotationModifier(ctx, InterfaceBodyDeclarationContext.class,"modifier.classOrInterfaceModifier.annotation",vars);
 		super.enterConstDeclaration(ctx);
@@ -371,6 +387,7 @@ public class JavaListener extends JavaParserBaseListener {
 		super.enterLocalVariableDeclaration(ctx);
 	}
 
+	// for循环中的变量，如for(Node node : nodes)中的node
 	public void enterEnhancedForControl(EnhancedForControlContext ctx) {
 		List<GenericName> typeArguments = ClassTypeContextHelper.getTypeArguments(ctx.typeType());
 		List<VarEntity> vars = context.foundVarDefinitions(VariableDeclaratorsContextHelper.getVariable((ctx.variableDeclaratorId())),
@@ -448,4 +465,177 @@ public class JavaListener extends JavaParserBaseListener {
 		context.done();
 	}
 
+	private void processTypeEntity(TypeEntity type, RuleContext ctx) {
+		Set<String> rootClassSet = new HashSet<>();
+		rootClassSet.add("TypeDeclarationContext");
+		rootClassSet.add("LocalTypeDeclarationContext");
+		rootClassSet.add("InterfaceBodyDeclarationContext");
+		rootClassSet.add("ClassBodyDeclarationContext");
+		while (true) {
+			if (ctx == null)
+				break;
+			if (rootClassSet.contains(ctx.getClass().getSimpleName()))
+				break;
+			ctx = ctx.parent;
+		}
+		if (ctx != null) {
+			List<ClassOrInterfaceModifierContext> modifierContextList = new ArrayList<>();
+			switch (ctx.getClass().getSimpleName()) {
+				case "TypeDeclarationContext":
+					modifierContextList = ((TypeDeclarationContext) ctx).classOrInterfaceModifier();
+					break;
+				case "LocalTypeDeclarationContext":
+					modifierContextList = ((LocalTypeDeclarationContext) ctx).classOrInterfaceModifier();
+					break;
+				case "InterfaceBodyDeclarationContext":
+					for (ModifierContext modifierContext : ((InterfaceBodyDeclarationContext) ctx).modifier()) {
+						if (modifierContext.classOrInterfaceModifier() != null) {
+							modifierContextList.add(modifierContext.classOrInterfaceModifier());
+						}
+					}
+					// 接口中的内部类（包括普通类、接口、枚举类）都默认为public、static
+					type.setAccessModifier("public");
+					type.setStatic(true);
+					break;
+				case "ClassBodyDeclarationContext":
+					for (ModifierContext modifierContext : ((ClassBodyDeclarationContext) ctx).modifier()) {
+						if (modifierContext.classOrInterfaceModifier() != null) {
+							modifierContextList.add(modifierContext.classOrInterfaceModifier());
+						}
+					}
+					break;
+			}
+			for (ClassOrInterfaceModifierContext modifierContext : modifierContextList) {
+				if (modifierContext == null) {
+					System.out.println("here");
+				}
+				String modifier = modifierContext.getText();
+				if (modifier.equals("public") || modifier.equals("private") || modifier.equals("protected")) {
+					type.setAccessModifier(modifier);
+				} else {
+					switch (modifier) {
+						case "abstract":
+							type.setAbstract(true);
+							break;
+						case "static":
+							type.setStatic(true);
+							break;
+						case "final":
+							type.setFinal(true);
+							break;
+					}
+				}
+			}
+		}
+	}
+
+	private void processFunctionEntity(FunctionEntity function, RuleContext ctx) {
+		Set<String> rootClassSet = new HashSet<>();
+		rootClassSet.add("InterfaceBodyDeclarationContext");
+		rootClassSet.add("ClassBodyDeclarationContext");
+		while (true) {
+			if (ctx == null)
+				break;
+			if (rootClassSet.contains(ctx.getClass().getSimpleName()))
+				break;
+			ctx = ctx.parent;
+		}
+		if (ctx != null) {
+			List<ClassOrInterfaceModifierContext> modifierContextList = new ArrayList<>();
+			switch (ctx.getClass().getSimpleName()) {
+				case "InterfaceBodyDeclarationContext":
+					for (ModifierContext modifierContext : ((InterfaceBodyDeclarationContext) ctx).modifier()) {
+						if (modifierContext.classOrInterfaceModifier() != null) {
+							modifierContextList.add(modifierContext.classOrInterfaceModifier());
+						}
+					}
+					// 接口中除了私有实例方法和私有类方法，其他方法均默认使用public修饰，即使是default方法，该方法为有方法体的实例方法，而不是表示该方法的访问权限为default
+					// 若为私有方法，则当前的public会被private覆盖掉，若为default方法，则不需要改变，因为并不对default进行处理
+					function.setAccessModifier("public");
+					break;
+				case "ClassBodyDeclarationContext":
+					for (ModifierContext modifierContext : ((ClassBodyDeclarationContext) ctx).modifier()) {
+						if (modifierContext.classOrInterfaceModifier() != null) {
+							modifierContextList.add(modifierContext.classOrInterfaceModifier());
+						}
+					}
+					break;
+			}
+			for (ClassOrInterfaceModifierContext modifierContext : modifierContextList) {
+				if (modifierContext == null) {
+					System.out.println("here");
+				}
+				String modifier = modifierContext.getText();
+				if (modifier.equals("public") || modifier.equals("private") || modifier.equals("protected")) {
+					function.setAccessModifier(modifier);
+				} else {
+					switch (modifier) {
+						case "abstract":
+							function.setAbstract(true);
+							break;
+						case "static":
+							function.setStatic(true);
+							break;
+						case "final":
+							function.setFinal(true);
+							break;
+					}
+				}
+			}
+		}
+	}
+
+	private void processVariableEntity(VarEntity variable, RuleContext ctx) {
+		Set<String> rootClassSet = new HashSet<>();
+		rootClassSet.add("InterfaceBodyDeclarationContext");
+		rootClassSet.add("ClassBodyDeclarationContext");
+		while (true) {
+			if (ctx == null)
+				break;
+			if (rootClassSet.contains(ctx.getClass().getSimpleName()))
+				break;
+			ctx = ctx.parent;
+		}
+		if (ctx != null) {
+			List<ClassOrInterfaceModifierContext> modifierContextList = new ArrayList<>();
+			switch (ctx.getClass().getSimpleName()) {
+				case "InterfaceBodyDeclarationContext":
+					for (ModifierContext modifierContext : ((InterfaceBodyDeclarationContext) ctx).modifier()) {
+						if (modifierContext.classOrInterfaceModifier() != null) {
+							modifierContextList.add(modifierContext.classOrInterfaceModifier());
+						}
+					}
+					// 接口中的变量只能为静态成员变量，默认public、static、final
+					variable.setAccessModifier("public");
+					variable.setStatic(true);
+					variable.setFinal(true);
+					break;
+				case "ClassBodyDeclarationContext":
+					for (ModifierContext modifierContext : ((ClassBodyDeclarationContext) ctx).modifier()) {
+						if (modifierContext.classOrInterfaceModifier() != null) {
+							modifierContextList.add(modifierContext.classOrInterfaceModifier());
+						}
+					}
+					break;
+			}
+			for (ClassOrInterfaceModifierContext modifierContext : modifierContextList) {
+				if (modifierContext == null) {
+					System.out.println("here");
+				}
+				String modifier = modifierContext.getText();
+				if (modifier.equals("public") || modifier.equals("private") || modifier.equals("protected")) {
+					variable.setAccessModifier(modifier);
+				} else {
+					switch (modifier) {
+						case "static":
+							variable.setStatic(true);
+							break;
+						case "final":
+							variable.setFinal(true);
+							break;
+					}
+				}
+			}
+		}
+	}
 }

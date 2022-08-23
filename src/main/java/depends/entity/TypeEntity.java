@@ -32,11 +32,28 @@ import depends.extractor.java.PathConverter;
 import depends.relations.Inferer;
 
 public class TypeEntity extends ContainerEntity {
+
     Collection<TypeEntity> inheritedTypes = new ArrayList<>();
+
     Collection<TypeEntity> implementedTypes = new ArrayList<>();
+
     Collection<GenericName> inheritedTypeIdentifiers;
+
     Collection<GenericName> implementedIdentifiers;
+
     TypeEntity inheritedType;
+
+    private boolean isAbstract = false;
+
+    private boolean isStatic = false;
+
+    private boolean isFinal = false;
+
+    private boolean isInterface = false;
+
+    private boolean isEnum = false;
+
+    private String accessModifier = "default";
 
     public TypeEntity() {
     }
@@ -210,14 +227,51 @@ public class TypeEntity extends ContainerEntity {
         return null;
     }
 
-    private boolean isEnum = false;
+    public boolean isAbstract() {
+        return isAbstract;
+    }
+
+    public boolean isStatic() {
+        return isStatic;
+    }
+
+    public boolean isFinal() {
+        return isFinal;
+    }
+
+    public boolean isInterface() {
+        return isInterface;
+    }
 
     public boolean isEnum() {
         return isEnum;
     }
 
-    public void setEnum(boolean anEnum) {
-        isEnum = anEnum;
+    public String getAccessModifier() {
+        return accessModifier;
     }
 
+    public void setAbstract(boolean isAbstract) {
+        this.isAbstract = isAbstract;
+    }
+
+    public void setStatic(boolean isStatic) {
+        this.isStatic = isStatic;
+    }
+
+    public void setFinal(boolean isFinal) {
+        this.isFinal = isFinal;
+    }
+
+    public void setInterface(boolean isInterface) {
+        this.isInterface = isInterface;
+    }
+
+    public void setEnum(boolean isEnum) {
+        this.isEnum = isEnum;
+    }
+
+    public void setAccessModifier(String accessModifier) {
+        this.accessModifier = accessModifier;
+    }
 }

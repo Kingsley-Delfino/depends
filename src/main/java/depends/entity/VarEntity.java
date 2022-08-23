@@ -30,9 +30,18 @@ import java.util.List;
 import depends.relations.Inferer;
 
 public class VarEntity extends ContainerEntity {
+
     private GenericName rawType;
+
     private TypeEntity type;
+
     private List<FunctionCall> functionCalls;
+
+    private boolean isStatic = false;
+
+    private boolean isFinal = false;
+
+    private String accessModifier = "default";
 
     public VarEntity() {
 
@@ -130,4 +139,27 @@ public class VarEntity extends ContainerEntity {
         this.builtInDetail = builtInDetail;
     }
 
+    public boolean isStatic() {
+        return isStatic;
+    }
+
+    public boolean isFinal() {
+        return isFinal;
+    }
+
+    public String getAccessModifier() {
+        return accessModifier;
+    }
+
+    public void setStatic(boolean isStatic) {
+        this.isStatic = isStatic;
+    }
+
+    public void setFinal(boolean isFinal) {
+        this.isFinal = isFinal;
+    }
+
+    public void setAccessModifier(String accessModifier) {
+        this.accessModifier = accessModifier;
+    }
 }
